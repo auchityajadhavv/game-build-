@@ -1,0 +1,11 @@
+{
+  "appId": "com.prismdrift.tilt",
+  "appName": "Prism Drift",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "backgroundColor": "#05050aff"
+  }
+}
