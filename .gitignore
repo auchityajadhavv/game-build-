@@ -1,0 +1,13 @@
+# Dependencies
+node_modules/
+
+# Capacitor-generated native project (regenerated in CI via `cap add android`)
+android/
+ios/
+
+# Build output
+dist/
+
+# OS / editor cruft
+.DS_Store
+*.log

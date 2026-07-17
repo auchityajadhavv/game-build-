@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Prism Drift — Tilt</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: #05050a;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    overscroll-behavior: none;
+  }
+  #gameCanvas { display: block; width: 100%; height: 100%; }
+
+  #hud {
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + 16px);
+    left: 0; right: 0;
+    text-align: center;
+    color: white;
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-shadow: 0 0 10px rgba(255,255,255,0.6);
+    pointer-events: none;
+    z-index: 10;
+  }
+  #best { font-size: 14px; font-weight: 400; opacity: 0.7; margin-top: 2px; }
+
+  /* ---------- tilt meter ---------- */
+  #meter {
+    position: fixed;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 26px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: 190px;
+    z-index: 10;
+    pointer-events: none;
+    text-align: center;
+  }
+  #meter.hidden { display: none !important; }
+  #track {
+    position: relative;
+    height: 8px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.1);
+    overflow: hidden;
+  }
+  #centerMark {
+    position: absolute;
+    left: 50%; top: 0; bottom: 0;
+    width: 2px;
+    margin-left: -1px;
+    background: rgba(255,255,255,0.3);
+  }
+  #fill {
+    position: absolute;
+    top: 0; bottom: 0;
+    left: 50%;
+    width: 0;
+    background: rgba(255,255,255,0.85);
+    box-shadow: 0 0 12px rgba(255,255,255,0.7);
+    border-radius: 4px;
+  }
+  #meterLabels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 7px;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: rgba(255,255,255,0.35);
+  }
+
+  /* ---------- small utility buttons ---------- */
+  #tools {
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + 14px);
+    right: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 11;
+  }
+  #tools.hidden { display: none !important; }
+  .tool {
+    padding: 7px 12px;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.25);
+    background: rgba(255,255,255,0.06);
+    color: rgba(255,255,255,0.75);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+  .tool:active { background: rgba(255,255,255,0.85); color: #05050a; }
+  .tool.on { background: rgba(255,255,255,0.85); color: #05050a; }
+
+  #hint {
+    position: fixed;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 78px);
+    left: 0; right: 0;
+    text-align: center;
+    color: rgba(255,255,255,0.6);
+    font-size: 12px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-weight: 600;
+    z-index: 10;
+    pointer-events: none;
+    animation: breathe 1.8s ease-in-out infinite;
+  }
+  #hint.hidden { display: none !important; }
+  @keyframes breathe { 50% { opacity: 0.3; } }
+
+  #overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    text-align: center;
+    z-index: 20;
+    padding: 24px;
+    background: rgba(0,0,0,0.35);
+    backdrop-filter: blur(2px);
+  }
+  #overlay h1 {
+    font-size: 40px;
+    letter-spacing: 4px;
+    margin-bottom: 8px;
+    text-shadow: 0 0 20px rgba(255,255,255,0.5);
+  }
+  #overlay p {
+    font-size: 15px;
+    opacity: 0.85;
+    margin-bottom: 24px;
+    max-width: 290px;
+    line-height: 1.55;
+  }
+  #overlay .score-big { font-size: 64px; font-weight: 800; margin-bottom: 4px; }
+  #overlay .score-label {
+    font-size: 13px; opacity: 0.7; letter-spacing: 2px;
+    text-transform: uppercase; margin-bottom: 28px;
+  }
+  #err {
+    font-size: 12px;
+    color: #ffb3b3;
+    max-width: 280px;
+    line-height: 1.5;
+    margin-top: 18px;
+  }
+  .btn {
+    padding: 15px 40px;
+    border-radius: 30px;
+    border: none;
+    background: white;
+    color: #111;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    box-shadow: 0 4px 20px rgba(255,255,255,0.3);
+  }
+  .btn:active { transform: scale(0.96); }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div id="hud">
+  <div id="scoreText">0</div>
+  <div id="best">BEST: 0</div>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<div id="tools" class="hidden">
+  <button class="tool" id="recenterBtn">Re-center</button>
+  <button class="tool" id="invertBtn">Invert</button>
+</div>
+
+<div id="hint" class="hidden">Tilt to drift</div>
+
+<div id="meter" class="hidden">
+  <div id="track">
+    <div id="centerMark"></div>
+    <div id="fill"></div>
+  </div>
+  <div id="meterLabels"><span>Down</span><span>Level</span><span>Up</span></div>
+</div>
+
+<div id="overlay">
+  <h1>PRISM DRIFT</h1>
+  <p>Tilt your phone back to rise, forward to fall.<br>Hold it however is comfy — tapping START sets that as level.</p>
+  <button class="btn" id="startBtn">START</button>
+  <div id="err" class="hidden"></div>
+</div>
+
+<script>
+(function() {
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  const overlay = document.getElementById('overlay');
+  const scoreText = document.getElementById('scoreText');
+  const bestText = document.getElementById('best');
+  const startBtn = document.getElementById('startBtn');
+  const meter = document.getElementById('meter');
+  const fill = document.getElementById('fill');
+  const tools = document.getElementById('tools');
+  const hint = document.getElementById('hint');
+  const recenterBtn = document.getElementById('recenterBtn');
+  const invertBtn = document.getElementById('invertBtn');
+  const errBox = document.getElementById('err');
+
+  let W, H, DPR;
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W * DPR;
+    canvas.height = H * DPR;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------- Game State ----------
+  let state = 'menu';
+  let best = parseInt(localStorage.getItem('prismDriftTiltBest') || '0', 10);
+  bestText.textContent = 'BEST: ' + best;
+
+  let ball, obstacles, particles, distance, speed, gravity, shakeT, hueBase;
+  let armed = false;
+  let gDir = 0;   // eased steering value, -1 (up) .. 1 (down)
+
+  // ---------- Tilt (gyro only) ----------
+  const DEADZONE = 2.5;   // degrees you can wobble without steering
+  const RANGE = 20;       // degrees from level to full pull
+  let tiltRaw = 0;        // current axis reading, degrees
+  let neutral = null;     // the "level" reading captured at start
+  let tilt = 0;           // normalised -1..1 steering, after deadzone
+  let invert = localStorage.getItem('prismDriftInvert') === '1';
+  let sensorSeen = false;
+
+  if (invert) invertBtn.classList.add('on');
+
+  // pick the axis that means "tipping the top edge toward/away from you",
+  // whichever way the phone happens to be rotated
+  function readAxis(e) {
+    let angle = 0;
+    if (screen.orientation && typeof screen.orientation.angle === 'number') angle = screen.orientation.angle;
+    else if (typeof window.orientation === 'number') angle = window.orientation;
+    if (angle === 90) return -e.gamma;
+    if (angle === -90 || angle === 270) return e.gamma;
+    if (angle === 180) return -e.beta;
+    return e.beta;
+  }
+
+  function onOrientation(e) {
+    if (e.beta === null && e.gamma === null) return;
+    sensorSeen = true;
+    const v = readAxis(e);
+    if (v === null || v === undefined) return;
+    tiltRaw = v;
+    if (neutral === null) neutral = v;
+  }
+
+  function updateTilt() {
+    if (neutral === null) { tilt = 0; return; }
+    let d = tiltRaw - neutral;
+    // tipping the top edge back (toward you) reads as "up"
+    let mag = 0;
+    if (Math.abs(d) > DEADZONE) {
+      mag = (Math.abs(d) - DEADZONE) / (RANGE - DEADZONE);
+      mag = Math.min(1, mag) * Math.sign(d);
+    }
+    tilt = -mag * (invert ? -1 : 1);
+  }
+
+  function enableSensor() {
+    return new Promise((resolve) => {
+      if (typeof DeviceOrientationEvent === 'undefined') { resolve(false); return; }
+      const attach = () => {
+        window.addEventListener('deviceorientation', onOrientation, true);
+        // give the sensor a moment to actually produce a reading
+        setTimeout(() => resolve(sensorSeen), 600);
+      };
+      // iOS 13+ demands an explicit grant, and only from inside a tap
+      if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+        DeviceOrientationEvent.requestPermission()
+          .then(res => { if (res === 'granted') attach(); else resolve(false); })
+          .catch(() => resolve(false));
+      } else {
+        attach();
+      }
+    });
+  }
+
+  function showSensorError() {
+    errBox.textContent = (typeof DeviceOrientationEvent === 'undefined')
+      ? 'No motion sensor detected on this device. Prism Drift needs a gyroscope to play.'
+      : 'Motion access was blocked. Grant motion permission (or reopen the app) and tap START again.';
+    errBox.classList.remove('hidden');
+  }
+
+  recenterBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    neutral = tiltRaw;
+  });
+  invertBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    invert = !invert;
+    invertBtn.classList.toggle('on', invert);
+    localStorage.setItem('prismDriftInvert', invert ? '1' : '0');
+  });
+
+  function arm() {
+    if (armed) return;
+    armed = true;
+    hint.classList.add('hidden');
+  }
+
+  // ---------- Setup ----------
+  function resetGame() {
+    ball = {
+      x: W * 0.28,
+      y: H * 0.5,
+      r: Math.max(13, Math.min(20, W * 0.026)),
+      vy: 0
+    };
+    obstacles = [];
+    particles = [];
+    distance = 0;
+    speed = W * 0.26;
+    gravity = H * 0.95;
+    gDir = 0;
+    shakeT = 0;
+    hueBase = 200;
+    armed = false;
+    spawnTimer = 0;
+    nextSpawnGap = 1800;
+  }
+
+  let spawnTimer = 0;
+  let nextSpawnGap = 1800;
+
+  function spawnObstacle() {
+    const gapSize = Math.max(H * 0.30, H * 0.48 - distance * 0.0025);
+    const margin = H * 0.08;
+    const gapCenter = margin + gapSize / 2 + Math.random() * (H - margin * 2 - gapSize);
+    const type = Math.random() < 0.25 ? 'bar' : 'spike';
+    obstacles.push({
+      x: W + 40, gapCenter, gapSize,
+      width: type === 'bar' ? 22 : 34,
+      type, passed: false
+    });
+  }
+
+  function spawnParticle(x, y, hue) {
+    particles.push({
+      x, y,
+      vx: -speed * (0.3 + Math.random() * 0.4),
+      vy: (Math.random() - 0.5) * 60,
+      life: 1, hue,
+      r: 2 + Math.random() * 2.5
+    });
+  }
+
+  startBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    startBtn.textContent = '...';
+    const ok = await enableSensor();
+    startBtn.textContent = 'START';
+    if (!ok) {
+      showSensorError();
+      return;
+    }
+    errBox.classList.add('hidden');
+    neutral = tiltRaw; // whatever they're holding right now is level
+    startGame();
+  });
+
+  function startGame() {
+    resetGame();
+    state = 'playing';
+    overlay.classList.add('hidden');
+    meter.classList.remove('hidden');
+    hint.classList.remove('hidden');
+    tools.classList.remove('hidden');
+  }
+
+  function gameOver() {
+    state = 'dead';
+    if (Math.floor(distance / 10) > best) {
+      best = Math.floor(distance / 10);
+      localStorage.setItem('prismDriftTiltBest', best);
+    }
+    bestText.textContent = 'BEST: ' + best;
+    meter.classList.add('hidden');
+    hint.classList.add('hidden');
+    tools.classList.add('hidden');
+    showOverlay();
+  }
+
+  function showOverlay() {
+    overlay.innerHTML = `
+      <div class="score-big">${Math.floor(distance / 10)}</div>
+      <div class="score-label">Distance</div>
+      <button class="btn" id="retryBtn">RETRY</button>
+    `;
+    overlay.classList.remove('hidden');
+    document.getElementById('retryBtn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      neutral = tiltRaw; // re-level for however they're holding it now
+      startGame();
+    });
+  }
+
+  // ---------- Update ----------
+  let lastT = performance.now();
+  function update(dt) {
+    updateTilt();
+    if (state !== 'playing') return;
+
+    // hold still on the start line until they actually tilt
+    if (!armed) {
+      if (Math.abs(tilt) > 0.15) arm();
+      else {
+        ball.y = H * 0.5 + Math.sin(performance.now() / 420) * ball.r * 0.3;
+        ball.vy = 0;
+        gDir = 0;
+        return;
+      }
+    }
+
+    distance += speed * dt;
+    speed = Math.min(W * 0.62, W * 0.26 + distance * 0.008);
+    hueBase = (200 + distance * 0.05) % 360;
+
+    // steering eases toward the tilt rather than tracking it exactly — this is
+    // what keeps the path curved, and it filters out hand shake
+    gDir += (tilt - gDir) * (1 - Math.exp(-9 * dt));
+    ball.vy += gravity * gDir * dt;
+    ball.vy *= Math.exp(-0.7 * dt); // drag, rounds off the arcs
+    ball.vy = Math.max(-H * 0.62, Math.min(H * 0.62, ball.vy));
+    ball.y += ball.vy * dt;
+
+    if (ball.y < ball.r) { ball.y = ball.r; die(); }
+    if (ball.y > H - ball.r) { ball.y = H - ball.r; die(); }
+
+    if (Math.random() < 0.6) spawnParticle(ball.x, ball.y, hueBase);
+
+    spawnTimer += dt * 1000;
+    if (spawnTimer > nextSpawnGap) {
+      spawnTimer = 0;
+      nextSpawnGap = Math.max(800, 1200 - distance * 0.035) + Math.random() * 300;
+      spawnObstacle();
+    }
+
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+      const o = obstacles[i];
+      o.x -= speed * dt;
+
+      const hitR = ball.r * 0.55;
+      const hitWidth = o.type === 'spike' ? o.width * 0.55 : o.width * 0.85;
+      if (o.x - hitWidth / 2 < ball.x + hitR && o.x + hitWidth / 2 > ball.x - hitR) {
+        const topEdge = o.gapCenter - o.gapSize / 2;
+        const botEdge = o.gapCenter + o.gapSize / 2;
+        if (ball.y - hitR < topEdge || ball.y + hitR > botEdge) die();
+      }
+      if (!o.passed && o.x < ball.x) o.passed = true;
+      if (o.x < -60) obstacles.splice(i, 1);
+    }
+
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.life -= dt * 1.6;
+      if (p.life <= 0) particles.splice(i, 1);
+    }
+
+    if (shakeT > 0) shakeT -= dt;
+    scoreText.textContent = Math.floor(distance / 10);
+  }
+
+  function die() {
+    if (state !== 'playing') return;
+    for (let i = 0; i < 40; i++) spawnParticle(ball.x, ball.y, hueBase);
+    if (navigator.vibrate) navigator.vibrate(35);
+    shakeT = 0.2;
+    gameOver();
+  }
+
+  function drawMeter() {
+    const pct = Math.max(-1, Math.min(1, -gDir)); // right = up, matching labels
+    const half = 95;
+    const w = Math.abs(pct) * half;
+    fill.style.width = w + 'px';
+    fill.style.left = pct >= 0 ? '50%' : (50 - (w / (half * 2)) * 100) + '%';
+  }
+
+  // ---------- Draw ----------
+  function draw() {
+    const h1 = hueBase;
+    const h2 = (hueBase + 40) % 360;
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, `hsl(${h1}, 55%, 10%)`);
+    grad.addColorStop(1, `hsl(${h2}, 60%, 6%)`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.save();
+    if (shakeT > 0) {
+      const mag = shakeT * 18;
+      ctx.translate((Math.random() - 0.5) * mag, (Math.random() - 0.5) * mag);
+    }
+
+    ctx.strokeStyle = `hsla(${h1}, 70%, 60%, 0.06)`;
+    ctx.lineWidth = 1;
+    const gridOffset = (distance * 0.5) % 80;
+    for (let x = -gridOffset; x < W; x += 80) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, H);
+      ctx.stroke();
+    }
+
+    for (const p of particles) {
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.fillStyle = `hsl(${p.hue}, 90%, 65%)`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    for (const o of obstacles) {
+      const topEdge = o.gapCenter - o.gapSize / 2;
+      const botEdge = o.gapCenter + o.gapSize / 2;
+      const glow = `hsl(${(h1 + 180) % 360}, 85%, 60%)`;
+      ctx.fillStyle = glow;
+      ctx.shadowColor = glow;
+      ctx.shadowBlur = 14;
+      if (o.type === 'bar') {
+        ctx.fillRect(o.x - o.width / 2, 0, o.width, topEdge);
+        ctx.fillRect(o.x - o.width / 2, botEdge, o.width, H - botEdge);
+      } else {
+        drawSpikes(o.x, 0, topEdge, o.width, 1);
+        drawSpikes(o.x, H, H - botEdge, o.width, -1);
+      }
+      ctx.shadowBlur = 0;
+    }
+
+    if (state === 'menu') {
+      const r = Math.max(13, Math.min(20, W * 0.026));
+      const bob = Math.sin(performance.now() / 420) * r * 0.25;
+      drawDrifter(W * 0.28, H * 0.5 + bob, r, 0, 0, 200);
+    } else {
+      drawDrifter(ball.x, ball.y, ball.r, ball.vy, gDir, h1);
+    }
+
+    ctx.restore();
+    drawMeter();
+  }
+
+  // The drifter banks into the tilt like a little aircraft, but keeps its feet
+  // pointed at the bottom of the screen — no barrel roll, since with analog
+  // steering it'd be sideways at rest.
+  function drawDrifter(x, y, r, vy, bank, hue) {
+    const body = `hsl(${hue}, 90%, 65%)`;
+    const dark = 'rgba(5, 5, 12, 0.85)';
+
+    const sp = Math.max(-1, Math.min(1, vy / (H * 0.75)));
+    const sy = 1 + Math.abs(sp) * 0.22;
+    const sx = 1 / sy;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(bank * 0.4); // lean into the direction you're steering
+    ctx.scale(sx, sy);
+
+    ctx.shadowColor = `hsl(${hue}, 90%, 65%)`;
+    ctx.shadowBlur = 20;
+    ctx.fillStyle = body;
+
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.16, -r * 0.75);
+    ctx.quadraticCurveTo(-r * 0.05, -r * 1.65, r * 0.34, -r * 1.5);
+    ctx.quadraticCurveTo(r * 0.06, -r * 1.08, r * 0.18, -r * 0.72);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.ellipse(0, 0, r, r * 0.94, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.ellipse(-r * 0.42, r * 0.82, r * 0.26, r * 0.18, 0, 0, Math.PI * 2);
+    ctx.ellipse(r * 0.42, r * 0.82, r * 0.26, r * 0.18, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    const look = Math.max(-1, Math.min(1, vy / (H * 0.6)));
+    const eyeY = -r * 0.12;
+    const eyeR = r * 0.30;
+    const surprised = Math.abs(sp) > 0.75;
+
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(-r * 0.36, eyeY, eyeR, 0, Math.PI * 2);
+    ctx.arc(r * 0.36, eyeY, eyeR, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = dark;
+    const pr = surprised ? eyeR * 0.36 : eyeR * 0.52;
+    const py = eyeY + look * eyeR * 0.4;
+    ctx.beginPath();
+    ctx.arc(-r * 0.36, py, pr, 0, Math.PI * 2);
+    ctx.arc(r * 0.36, py, pr, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = `hsla(${(hue + 320) % 360}, 95%, 70%, 0.5)`;
+    ctx.beginPath();
+    ctx.ellipse(-r * 0.72, r * 0.24, r * 0.2, r * 0.13, 0, 0, Math.PI * 2);
+    ctx.ellipse(r * 0.72, r * 0.24, r * 0.2, r * 0.13, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = dark;
+    ctx.lineWidth = Math.max(1.2, r * 0.1);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    if (surprised) ctx.arc(0, r * 0.42, r * 0.13, 0, Math.PI * 2);
+    else ctx.arc(0, r * 0.26, r * 0.22, 0.25 * Math.PI, 0.75 * Math.PI);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  function drawSpikes(cx, baseY, length, width, dir) {
+    if (length <= 0) return;
+    const teeth = Math.max(1, Math.round(length / 30));
+    const teethH = length / teeth;
+    ctx.beginPath();
+    for (let i = 0; i < teeth; i++) {
+      const y0 = baseY + dir * teethH * i;
+      const y1 = baseY + dir * teethH * (i + 1);
+      const yTip = (y0 + y1) / 2;
+      ctx.moveTo(cx - width / 2, y0);
+      ctx.lineTo(cx + width / 2, y0);
+      ctx.lineTo(cx, yTip - dir * teethH * 0.15);
+      ctx.closePath();
+      ctx.moveTo(cx - width / 2, y1);
+    }
+    ctx.fill();
+  }
+
+  function loop(t) {
+    const dt = Math.min(0.033, (t - lastT) / 1000);
+    lastT = t;
+    update(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  resetGame();
+  state = 'menu';
+  draw();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
